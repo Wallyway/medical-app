@@ -18,11 +18,17 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff",
+        "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "notification": {
+      "icon": "./assets/favicon.png",
+      "color": "#007bff",
+      "sounds": ["./assets/sounds/neon_android_oreo.wav"]
     }
   }
 }
