@@ -32,8 +32,8 @@ export default function ReminderDetailScreen({ route, navigation }) {
   const formatDateTime = (isoString) => {
     const date = new Date(isoString);
     return {
-      date: date.toLocaleDateString("es-CO"),
-      time: date.toLocaleTimeString("es-CO", {
+      date: date.toLocaleDateString(),
+      time: date.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       }),

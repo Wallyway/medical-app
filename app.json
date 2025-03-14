@@ -19,8 +19,13 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff",
-        "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
-      }
+        "permissions": [
+          "RECEIVE_BOOT_COMPLETED",
+          "VIBRATE"
+        ]
+      },
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"],
+      "package": "com.wallyway.medicalapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +33,28 @@
     "notification": {
       "icon": "./assets/favicon.png",
       "color": "#007bff",
-      "sounds": ["./assets/sounds/neon_android_oreo.wav"]
+      "sounds": [
+        "./assets/sounds/neon_android_oreo.wav"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0d371d6d-7347-4505-8d51-6010a44da1b4"
+      }
+    },
+    "expo":{
+      "plugins": [
+        [
+          "expo-notifications",
+          {
+            "icon": "./assets/favicon.png",
+            "color": "#007bff",
+            "sounds": [
+              "./assets/sounds/neon_android_oreo.wav"
+            ]
+          }
+        ]
+      ]
     }
   }
 }

@@ -14,7 +14,10 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { v4 as uuidv4 } from "uuid";
-import "react-native-get-random-values"; // Necesario para uuid
+import "react-native-get-random-values";
+import moment from "moment-timezone"; // Importamos moment-timezone
+
+const TWO_MINUTES = 2;
 
 export default function AddReminderScreen({ navigation }) {
   // Datos de medicamentos
@@ -95,31 +98,48 @@ export default function AddReminderScreen({ navigation }) {
     setTime(currentTime);
   };
 
-  // Programar notificación
+  // Programar notificación usando la zona horaria "America/Bogota"
   const scheduleNotification = async (reminder) => {
-    const trigger = new Date(reminder.time);
+    // Convertimos el string ISO a un objeto Date interpretado en "America/Bogota"
+    // const triggerDate = moment(reminder.time).tz("America/Bogota").toDate();
 
-    // Configurar repetición según frecuencia
+    let triggerDate = moment.tz(reminder.time, "America/Bogota").toDate();
     let notificationTrigger;
+    const now = new Date();
+    const delaySeconds = Math.floor(
+      (triggerDate.getTime() - now.getTime()) / 1000
+    );
+
+    console.log("Now:", now.toString());
+    console.log("TriggerDate:", triggerDate.toString());
+    console.log("DelaySeconds:", delaySeconds);
 
     if (reminder.frequency === "once") {
-      notificationTrigger = { date: trigger };
+      // Si delaySeconds es menor o igual a cero, forzamos al menos 1 segundo de retraso
+      notificationTrigger = {
+        // seconds: delaySeconds > 0 ? delaySeconds : 1,
+        // repeats: false,
+        date: triggerDate,
+      };
     } else if (reminder.frequency === "daily") {
       notificationTrigger = {
-        hour: trigger.getHours(),
-        minute: trigger.getMinutes(),
+        hour: triggerDate.getHours(),
+        minute: triggerDate.getMinutes(),
         repeats: true,
       };
     } else if (reminder.frequency === "weekly") {
       notificationTrigger = {
-        weekday: reminder.weekDay + 1, // Ajuste porque Expo usa 1-7 para días
-        hour: trigger.getHours(),
-        minute: trigger.getMinutes(),
+        // Expo usa 1 (domingo) a 7 (sábado)
+        weekday: reminder.weekDay + 1,
+        hour: triggerDate.getHours(),
+        minute: triggerDate.getMinutes(),
         repeats: true,
       };
+
+      console.log("weekday:", weekDay);
+      console.log("hour:", weekDay);
     }
 
-    // Programar la notificación
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: `Recordatorio de medicamento: ${reminder.medication}`,
@@ -127,11 +147,11 @@ export default function AddReminderScreen({ navigation }) {
           reminder.medication
         }${reminder.notes ? `. Nota: ${reminder.notes}` : ""}`,
         sound: "neon_android_oreo.wav",
-        vibrate: [0, 250, 250, 250], // Patrón de vibración (opcional)
+        vibrate: [0, 250, 250, 250],
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
-      trigger: notificationTrigger,
-      identifier: reminder.id, // Para poder cancelar después si es necesario
+      trigger: { type: "date", date: triggerDate },
+      identifier: reminder.id,
     });
 
     return notificationId;
@@ -147,24 +167,28 @@ export default function AddReminderScreen({ navigation }) {
         return;
       }
 
-      // Crear objeto de fecha/hora combinado
-      const reminderTime = new Date(time);
+      // Combinar fecha y hora usando moment.tz para forzar la zona "America/Bogota"
+      const reminderTime = moment
+        .tz(
+          {
+            year: date.getFullYear(),
+            month: date.getMonth(),
+            day: date.getDate(),
+            hour: time.getHours(),
+            minute: time.getMinutes(),
+            second: time.getSeconds(),
+          },
+          "America/Bogota"
+        )
+        .toDate();
 
-      if (frequency === "once") {
-        reminderTime.setFullYear(
-          date.getFullYear(),
-          date.getMonth(),
-          date.getDate()
-        );
+      console.log("ReminderTime (America/Bogota):", reminderTime.toString());
+      console.log("ReminderTime ISO:", reminderTime.toISOString());
 
-        // Verificar que la fecha no sea en el pasado
-        if (reminderTime < new Date()) {
-          Alert.alert(
-            "Error",
-            "No puedes programar recordatorios en el pasado"
-          );
-          return;
-        }
+      // Verificar que la fecha no sea en el pasado
+      if (reminderTime < new Date()) {
+        Alert.alert("Error", "No puedes programar recordatorios en el pasado");
+        return;
       }
 
       // Crear objeto de recordatorio
@@ -180,17 +204,12 @@ export default function AddReminderScreen({ navigation }) {
         weekDay: weekDay,
       };
 
-      // Programar notificación
+      // Programar la notificación
       await scheduleNotification(newReminder);
 
       // Guardar en AsyncStorage
       const savedReminders = await AsyncStorage.getItem("medicationReminders");
-      let remindersArray = [];
-
-      if (savedReminders) {
-        remindersArray = JSON.parse(savedReminders);
-      }
-
+      let remindersArray = savedReminders ? JSON.parse(savedReminders) : [];
       remindersArray.push(newReminder);
       await AsyncStorage.setItem(
         "medicationReminders",
