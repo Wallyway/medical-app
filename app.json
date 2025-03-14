@@ -20,7 +20,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"],
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.ACCESS_BACKGROUND_SERVICE" ],
       "package": "com.wallyway.medicalapp"
     },
     "web": {
