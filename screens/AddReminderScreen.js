@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -15,52 +15,53 @@ import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { v4 as uuidv4 } from "uuid";
 import "react-native-get-random-values";
-import moment from "moment-timezone"; // Importamos moment-timezone
+import moment from "moment-timezone";
 
-const TWO_MINUTES = 2;
+// Mover datos medicamentos fuera del componente para evitar recreaciones
+const medications = {
+  Antihipertensivos: {
+    Enalapril: ["5 mg", "10 mg", "20 mg"],
+    Losartán: ["50 mg", "100 mg"],
+    Amlodipino: ["5 mg", "10 mg"],
+    Hidroclorotiazida: ["25 mg"],
+  },
+  Antidiabéticos: {
+    Metformina: ["500 mg", "850 mg", "1000 mg"],
+    Glibenclamida: ["5 mg"],
+    "Insulina NPH": ["Frasco ámpula 100 UI/ml"],
+    "Insulina Glargina": ["Pluma precargada 100 UI/ml"],
+  },
+  Hipolipemiantes: {
+    Atorvastatina: ["10 mg", "20 mg", "40 mg"],
+    Rosuvastatina: ["5 mg", "10 mg", "20 mg"],
+  },
+  "Analgésicos y Antiinflamatorios": {
+    Paracetamol: ["500 mg", "1 g"],
+    Ibuprofeno: ["200 mg", "400 mg", "600 mg"],
+    Tramadol: ["50 mg", "100 mg", "Solución oral 100 mg/2 ml"],
+  },
+  "Protectores Gástricos": {
+    Omeprazol: ["20 mg"],
+    Pantoprazol: ["20 mg", "40 mg"],
+  },
+};
 
 export default function AddReminderScreen({ navigation }) {
-  // Datos de medicamentos
-  const medications = {
-    Antihipertensivos: {
-      Enalapril: ["5 mg", "10 mg", "20 mg"],
-      Losartán: ["50 mg", "100 mg"],
-      Amlodipino: ["5 mg", "10 mg"],
-      Hidroclorotiazida: ["25 mg"],
-    },
-    Antidiabéticos: {
-      Metformina: ["500 mg", "850 mg", "1000 mg"],
-      Glibenclamida: ["5 mg"],
-      "Insulina NPH": ["Frasco ámpula 100 UI/ml"],
-      "Insulina Glargina": ["Pluma precargada 100 UI/ml"],
-    },
-    Hipolipemiantes: {
-      Atorvastatina: ["10 mg", "20 mg", "40 mg"],
-      Rosuvastatina: ["5 mg", "10 mg", "20 mg"],
-    },
-    "Analgésicos y Antiinflamatorios": {
-      Paracetamol: ["500 mg", "1 g"],
-      Ibuprofeno: ["200 mg", "400 mg", "600 mg"],
-      Tramadol: ["50 mg", "100 mg", "Solución oral 100 mg/2 ml"],
-    },
-    "Protectores Gástricos": {
-      Omeprazol: ["20 mg"],
-      Pantoprazol: ["20 mg", "40 mg"],
-    },
-  };
+  // Estados iniciales
+  const categoriesArray = useMemo(() => Object.keys(medications), []);
+  const initialCategory = categoriesArray[0];
+  const initialMedications = useMemo(
+    () => Object.keys(medications[initialCategory]),
+    [initialCategory]
+  );
+  const initialMedication = initialMedications[0];
+  const initialDoses = medications[initialCategory][initialMedication];
 
-  // Estados
-  const [selectedCategory, setSelectedCategory] = useState(
-    Object.keys(medications)[0]
-  );
-  const [selectedMedication, setSelectedMedication] = useState(
-    Object.keys(medications[Object.keys(medications)[0]])[0]
-  );
-  const [selectedDose, setSelectedDose] = useState(
-    medications[Object.keys(medications)[0]][
-      Object.keys(medications[Object.keys(medications)[0]])[0]
-    ][0]
-  );
+  // Estados con valores por defecto
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
+  const [selectedMedication, setSelectedMedication] =
+    useState(initialMedication);
+  const [selectedDose, setSelectedDose] = useState(initialDoses[0]);
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(new Date());
@@ -68,128 +69,94 @@ export default function AddReminderScreen({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [frequency, setFrequency] = useState("daily");
-  const [weekDay, setWeekDay] = useState(1); // Lunes por defecto
+  const [weekDay, setWeekDay] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Actualiza medicaciones disponibles cuando cambia la categoría
-  const updateMedicationOptions = (category) => {
+  // Memos para evitar cálculos repetidos
+  const medicationOptions = useMemo(
+    () => Object.keys(medications[selectedCategory]),
+    [selectedCategory]
+  );
+
+  const doseOptions = useMemo(
+    () => medications[selectedCategory][selectedMedication],
+    [selectedCategory, selectedMedication]
+  );
+
+  // Funciones de actualización
+  const updateMedicationOptions = useCallback((category) => {
     setSelectedCategory(category);
-    const medicationOptions = Object.keys(medications[category]);
-    setSelectedMedication(medicationOptions[0]);
-    setSelectedDose(medications[category][medicationOptions[0]][0]);
-  };
+    const newMedicationOptions = Object.keys(medications[category]);
+    setSelectedMedication(newMedicationOptions[0]);
+    setSelectedDose(medications[category][newMedicationOptions[0]][0]);
+  }, []);
 
-  // Actualiza dosis disponibles cuando cambia el medicamento
-  const updateDoseOptions = (medication) => {
-    setSelectedMedication(medication);
-    setSelectedDose(medications[selectedCategory][medication][0]);
-  };
+  const updateDoseOptions = useCallback(
+    (medication) => {
+      setSelectedMedication(medication);
+      setSelectedDose(medications[selectedCategory][medication][0]);
+    },
+    [selectedCategory]
+  );
 
-  // Maneja el cambio de fecha
-  const onDateChange = (event, selectedDate) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(Platform.OS === "ios");
-    setDate(currentDate);
-  };
-
-  // Maneja el cambio de hora
-  const onTimeChange = (event, selectedTime) => {
-    const currentTime = selectedTime || time;
-    setShowTimePicker(Platform.OS === "ios");
-    setTime(currentTime);
-  };
-
-  // Programar notificación usando la zona horaria "America/Bogota"
-  const scheduleNotification = async (reminder) => {
-    // Convertimos el string ISO a un objeto Date interpretado en "America/Bogota"
-    // const triggerDate = moment(reminder.time).tz("America/Bogota").toDate();
-
-    let triggerDate = moment.tz(reminder.time, "America/Bogota").toDate();
-    let notificationTrigger;
-    const now = new Date();
-    const delaySeconds = Math.floor(
-      (triggerDate.getTime() - now.getTime()) / 1000
-    );
-
-    console.log("Now:", now.toString());
-    console.log("TriggerDate:", triggerDate.toString());
-    console.log("DelaySeconds:", delaySeconds);
-
-    if (reminder.frequency === "once") {
-      // Si delaySeconds es menor o igual a cero, forzamos al menos 1 segundo de retraso
-      notificationTrigger = {
-        // seconds: delaySeconds > 0 ? delaySeconds : 1,
-        // repeats: false,
-        date: triggerDate,
-      };
-    } else if (reminder.frequency === "daily") {
-      notificationTrigger = {
-        hour: triggerDate.getHours(),
-        minute: triggerDate.getMinutes(),
-        repeats: true,
-      };
-    } else if (reminder.frequency === "weekly") {
-      notificationTrigger = {
-        // Expo usa 1 (domingo) a 7 (sábado)
-        weekday: reminder.weekDay + 1,
-        hour: triggerDate.getHours(),
-        minute: triggerDate.getMinutes(),
-        repeats: true,
-      };
-
-      console.log("weekday:", weekDay);
-      console.log("hour:", weekDay);
+  // Handlers de eventos
+  const onDateChange = useCallback((event, selectedDate) => {
+    if (selectedDate) {
+      setDate(selectedDate);
     }
+    setShowDatePicker(Platform.OS === "ios");
+  }, []);
 
-    const notificationId = await Notifications.scheduleNotificationAsync({
+  const onTimeChange = useCallback((event, selectedTime) => {
+    if (selectedTime) {
+      setTime(selectedTime);
+    }
+    setShowTimePicker(Platform.OS === "ios");
+  }, []);
+
+  // Función optimizada para programar notificaciones
+  const scheduleNotification = useCallback(async (reminder) => {
+    const triggerDate = new Date(reminder.time);
+
+    // Configuración de la notificación
+    return await Notifications.scheduleNotificationAsync({
       content: {
-        title: `Recordatorio de medicamento: ${reminder.medication}`,
+        title: `Recordatorio: ${reminder.medication}`,
         body: `Es hora de tomar ${reminder.quantity} ${reminder.dose} de ${
           reminder.medication
         }${reminder.notes ? `. Nota: ${reminder.notes}` : ""}`,
         sound: "neon_android_oreo.wav",
-        vibrate: [0, 250, 250, 250],
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
-      trigger: { type: "date", date: triggerDate },
+      trigger: {
+        type: "date",
+        date: triggerDate,
+      },
       identifier: reminder.id,
     });
+  }, []);
 
-    return notificationId;
-  };
+  // Función optimizada para guardar el recordatorio
+  const saveReminder = useCallback(async () => {
+    if (isSaving) return; // Evitar múltiples envíos
 
-  // Guardar recordatorio
-  const saveReminder = async () => {
     try {
-      // Validar cantidad
+      setIsSaving(true);
+
+      // Validación de cantidad
       const quantityNum = parseInt(quantity);
       if (isNaN(quantityNum) || quantityNum <= 0) {
         Alert.alert("Error", "La cantidad debe ser un número mayor que 0");
+        setIsSaving(false);
         return;
       }
 
-      // Combinar fecha y hora usando moment.tz para forzar la zona "America/Bogota"
+      // Crear objeto de fecha con hora combinada
+      const combinedDateTime = new Date(date);
+      combinedDateTime.setHours(time.getHours(), time.getMinutes(), 0, 0);
       const reminderTime = moment
-        .tz(
-          {
-            year: date.getFullYear(),
-            month: date.getMonth(),
-            day: date.getDate(),
-            hour: time.getHours(),
-            minute: time.getMinutes(),
-            second: time.getSeconds(),
-          },
-          "America/Bogota"
-        )
-        .toDate();
-
-      console.log("ReminderTime (America/Bogota):", reminderTime.toString());
-      console.log("ReminderTime ISO:", reminderTime.toISOString());
-
-      // Verificar que la fecha no sea en el pasado
-      if (reminderTime < new Date()) {
-        Alert.alert("Error", "No puedes programar recordatorios en el pasado");
-        return;
-      }
+        .tz(combinedDateTime, "America/Bogota")
+        .toISOString();
 
       // Crear objeto de recordatorio
       const newReminder = {
@@ -199,30 +166,47 @@ export default function AddReminderScreen({ navigation }) {
         dose: selectedDose,
         quantity: quantity,
         notes: notes,
-        time: reminderTime.toISOString(),
+        time: reminderTime,
         frequency: frequency,
         weekDay: weekDay,
       };
 
-      // Programar la notificación
-      await scheduleNotification(newReminder);
-
-      // Guardar en AsyncStorage
+      // Recuperar y actualizar recordatorios existentes
       const savedReminders = await AsyncStorage.getItem("medicationReminders");
-      let remindersArray = savedReminders ? JSON.parse(savedReminders) : [];
+      const remindersArray = savedReminders ? JSON.parse(savedReminders) : [];
       remindersArray.push(newReminder);
-      await AsyncStorage.setItem(
-        "medicationReminders",
-        JSON.stringify(remindersArray)
-      );
+
+      // Guardar en AsyncStorage y programar notificación en paralelo
+      await Promise.all([
+        AsyncStorage.setItem(
+          "medicationReminders",
+          JSON.stringify(remindersArray)
+        ),
+        scheduleNotification(newReminder),
+      ]);
 
       Alert.alert("Éxito", "Recordatorio guardado correctamente");
       navigation.goBack();
     } catch (error) {
       console.error("Error al guardar recordatorio:", error);
       Alert.alert("Error", "No se pudo guardar el recordatorio");
+    } finally {
+      setIsSaving(false);
     }
-  };
+  }, [
+    isSaving,
+    quantity,
+    date,
+    time,
+    selectedCategory,
+    selectedMedication,
+    selectedDose,
+    notes,
+    frequency,
+    weekDay,
+    scheduleNotification,
+    navigation,
+  ]);
 
   return (
     <ScrollView style={styles.container}>
@@ -236,7 +220,7 @@ export default function AddReminderScreen({ navigation }) {
             onValueChange={updateMedicationOptions}
             style={styles.picker}
           >
-            {Object.keys(medications).map((category) => (
+            {categoriesArray.map((category) => (
               <Picker.Item key={category} label={category} value={category} />
             ))}
           </Picker>
@@ -249,7 +233,7 @@ export default function AddReminderScreen({ navigation }) {
             onValueChange={updateDoseOptions}
             style={styles.picker}
           >
-            {Object.keys(medications[selectedCategory]).map((med) => (
+            {medicationOptions.map((med) => (
               <Picker.Item key={med} label={med} value={med} />
             ))}
           </Picker>
@@ -259,10 +243,10 @@ export default function AddReminderScreen({ navigation }) {
         <View style={styles.pickerContainer}>
           <Picker
             selectedValue={selectedDose}
-            onValueChange={(value) => setSelectedDose(value)}
+            onValueChange={setSelectedDose}
             style={styles.picker}
           >
-            {medications[selectedCategory][selectedMedication].map((dose) => (
+            {doseOptions.map((dose) => (
               <Picker.Item key={dose} label={dose} value={dose} />
             ))}
           </Picker>
@@ -285,7 +269,7 @@ export default function AddReminderScreen({ navigation }) {
         <View style={styles.pickerContainer}>
           <Picker
             selectedValue={frequency}
-            onValueChange={(value) => setFrequency(value)}
+            onValueChange={setFrequency}
             style={styles.picker}
           >
             <Picker.Item label="Diario" value="daily" />
@@ -300,7 +284,7 @@ export default function AddReminderScreen({ navigation }) {
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={weekDay}
-                onValueChange={(value) => setWeekDay(value)}
+                onValueChange={setWeekDay}
                 style={styles.picker}
               >
                 <Picker.Item label="Lunes" value={1} />
@@ -374,8 +358,14 @@ export default function AddReminderScreen({ navigation }) {
         />
       </View>
 
-      <TouchableOpacity style={styles.saveButton} onPress={saveReminder}>
-        <Text style={styles.saveButtonText}>Guardar Recordatorio</Text>
+      <TouchableOpacity
+        style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+        onPress={saveReminder}
+        disabled={isSaving}
+      >
+        <Text style={styles.saveButtonText}>
+          {isSaving ? "Guardando..." : "Guardar Recordatorio"}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );

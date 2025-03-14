@@ -53,7 +53,16 @@ export default function App() {
         <Stack.Screen
           name="Home"
           component={HomeScreen}
-          options={{ title: "Mis Recordatorios de Medicamentos" }}
+          options={{
+            title: "Mis Recordatorios de Medicamentos",
+            headerTitleStyle: {
+              fontSize: 20,
+              fontWeight: "bold",
+              color: "#000000",
+              textAlign: "center",
+              marginBottom: 8,
+            },
+          }}
         />
         <Stack.Screen
           name="AddReminder"

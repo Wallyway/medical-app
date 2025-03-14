@@ -17,13 +17,20 @@ export default function HomeScreen({ navigation, route }) {
   // Cargar recordatorios al iniciar y cuando se actualiza la pantalla
   useEffect(() => {
     loadReminders();
+    let isMounted = true;
 
     // Actualizar la lista cuando se regrese de otra pantalla
     const unsubscribe = navigation.addListener("focus", () => {
-      loadReminders();
+      if (isMounted) {
+        loadReminders();
+      }
     });
 
-    return unsubscribe;
+    // Limpiar subscripción y establecer flag al desmontar
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [navigation]);
 
   // Cargar recordatorios desde AsyncStorage
@@ -31,10 +38,20 @@ export default function HomeScreen({ navigation, route }) {
     try {
       const savedReminders = await AsyncStorage.getItem("medicationReminders");
       if (savedReminders) {
-        setReminders(JSON.parse(savedReminders));
+        // Parsear JSON solo si hay datos
+        const parsedReminders = JSON.parse(savedReminders);
+
+        // Ordenar recordatorios por tiempo para mejor experiencia de usuario
+        parsedReminders.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+        setReminders(parsedReminders);
+      } else {
+        // Asegurarnos de que reminders esté vacío si no hay datos
+        setReminders([]);
       }
     } catch (error) {
       console.error("Error al cargar recordatorios:", error);
+      // Solo mostrar alerta en errores reales, no cuando no hay datos
       Alert.alert("Error", "No se pudieron cargar los recordatorios");
     }
   };
@@ -42,24 +59,29 @@ export default function HomeScreen({ navigation, route }) {
   // Eliminar un recordatorio
   const deleteReminder = async (id) => {
     try {
-      // Cancelar la notificación programada
-      await Notifications.cancelScheduledNotificationAsync(id);
-
-      // Eliminar de la lista local
+      // Actualización inmediata de la UI antes de operaciones asíncronas
       const updatedReminders = reminders.filter(
         (reminder) => reminder.id !== id
       );
       setReminders(updatedReminders);
 
-      // Guardar en AsyncStorage
-      await AsyncStorage.setItem(
-        "medicationReminders",
-        JSON.stringify(updatedReminders)
-      );
+      // Ejecutar operaciones asíncronas en paralelo
+      await Promise.all([
+        // Cancelar la notificación programada
+        Notifications.cancelScheduledNotificationAsync(id),
 
-      Alert.alert("Éxito", "Recordatorio eliminado correctamente");
+        // Guardar en AsyncStorage
+        AsyncStorage.setItem(
+          "medicationReminders",
+          JSON.stringify(updatedReminders)
+        ),
+      ]);
     } catch (error) {
       console.error("Error al eliminar recordatorio:", error);
+
+      // Restaurar estado anterior en caso de error
+      loadReminders();
+
       Alert.alert("Error", "No se pudo eliminar el recordatorio");
     }
   };
@@ -80,34 +102,57 @@ export default function HomeScreen({ navigation, route }) {
     );
   };
 
+  //EXPERIMENTO
+  // Optimización del renderItem con React.memo para evitar renderizados innecesarios
+  const ReminderItem = React.memo(({ item, onDelete }) => {
+    // Formateamos la fecha una sola vez
+    const formattedTime = new Date(item.time).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Determinamos el texto de frecuencia de manera más eficiente
+    let frequencyText;
+    switch (item.frequency) {
+      case "daily":
+        frequencyText = " (Diario)";
+        break;
+      case "weekly":
+        frequencyText = ` (Cada ${getDayName(item.weekDay)})`;
+        break;
+      default:
+        frequencyText = " (Una vez)";
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.reminderItem}
+        onPress={() =>
+          navigation.navigate("ReminderDetail", { reminder: item })
+        }
+      >
+        <View style={styles.reminderInfo}>
+          <Text style={styles.medicationName}>{item.medication}</Text>
+          <Text style={styles.doseText}>{item.dose}</Text>
+          <Text style={styles.timeText}>
+            {formattedTime}
+            {frequencyText}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => onDelete(item.id)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Área de toque aumentada
+        >
+          <Ionicons name="trash-outline" size={24} color="red" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  });
+
   // Renderizar cada item de la lista
   const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.reminderItem}
-      onPress={() => navigation.navigate("ReminderDetail", { reminder: item })}
-    >
-      <View style={styles.reminderInfo}>
-        <Text style={styles.medicationName}>{item.medication}</Text>
-        <Text style={styles.doseText}>{item.dose}</Text>
-        <Text style={styles.timeText}>
-          {new Date(item.time).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-          {item.frequency === "daily"
-            ? " (Diario)"
-            : item.frequency === "weekly"
-            ? ` (Cada ${getDayName(item.weekDay)})`
-            : " (Una vez)"}
-        </Text>
-      </View>
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => confirmDelete(item.id)}
-      >
-        <Ionicons name="trash-outline" size={24} color="red" />
-      </TouchableOpacity>
-    </TouchableOpacity>
+    <ReminderItem item={item} onDelete={confirmDelete} />
   );
 
   // Obtener nombre del día de la semana
